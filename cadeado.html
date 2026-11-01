@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src data:; connect-src 'none'; base-uri 'none'; form-action 'none'">
+<meta name="referrer" content="no-referrer">
+<title>Caos Organizado</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@900&family=Inter:wght@400;600&display=swap">
+<style>
+:root{color-scheme:dark;--roxo:#7C3AED;--amarelo:#DFFF00;--rule:#34313B;--mute:#8E8A98;--late:#FF5468}
+*{box-sizing:border-box}
+html,body{margin:0;min-height:100%;background:#000;color:#fff;font:15px "Inter",system-ui,sans-serif}
+body{display:grid;place-items:center;min-height:100vh;padding:16px;
+  background:radial-gradient(520px 360px at 100% 0%,color-mix(in srgb,var(--roxo) 38%,transparent),transparent 70%),
+             radial-gradient(460px 320px at 0% 100%,color-mix(in srgb,var(--roxo) 30%,transparent),transparent 70%),#000}
+form{width:100%;max-width:340px;display:flex;flex-direction:column;gap:14px}
+h1{font:900 34px/1 "Montserrat",sans-serif;text-transform:uppercase;margin:0 0 6px;letter-spacing:-.02em}
+input[type=password]{width:100%;padding:14px;border-radius:10px;border:1px solid var(--rule);background:#111015;color:#fff;font:inherit}
+input:focus{outline:2px solid var(--amarelo);outline-offset:2px}
+button{padding:14px;border:0;border-radius:10px;background:var(--amarelo);color:#000;font:600 15px "Inter",sans-serif;cursor:pointer}
+button:disabled{opacity:.6}
+label{display:flex;gap:8px;align-items:center;color:var(--mute);font-size:14px}
+#erro{color:var(--late);min-height:1.4em;margin:0;font-size:14px}
+</style>
+</head>
+<body>
+<form id="f">
+  <h1>Caos<br>Organizado</h1>
+  <input type="password" id="senha" placeholder="Senha" autocomplete="current-password" autofocus required>
+  <label><input type="checkbox" id="lembrar"> Lembrar neste aparelho</label>
+  <button id="btn">Entrar</button>
+  <p id="erro" role="alert"></p>
+</form>
+<script>
+(()=>{
+const SALT="__SALT__", IV="__IV__", ITER=__ITER__, DATA="__DATA__";
+const unb64=s=>Uint8Array.from(atob(s),c=>c.charCodeAt(0));
+const KEY="co.chave";
+
+async function abrir(rawKey){
+  const key=await crypto.subtle.importKey("raw",rawKey,"AES-GCM",false,["encrypt","decrypt"]);
+  const html=new TextDecoder().decode(await crypto.subtle.decrypt({name:"AES-GCM",iv:unb64(IV)},key,unb64(DATA)));
+  window.__coKey=key; // a agenda usa pra criptografar o que salva; não dá pra exportar
+  document.open(); document.write(html); document.close();
+}
+async function derivar(senha){
+  const base=await crypto.subtle.importKey("raw",new TextEncoder().encode(senha),"PBKDF2",false,["deriveBits"]);
+  return new Uint8Array(await crypto.subtle.deriveBits({name:"PBKDF2",salt:unb64(SALT),iterations:ITER,hash:"SHA-256"},base,256));
+}
+
+(async()=>{
+  let salva=null; try{salva=localStorage.getItem(KEY)}catch(e){}
+  if(salva){ try{ await abrir(unb64(salva)); return }catch(e){ try{localStorage.removeItem(KEY)}catch(_){} } }
+})();
+
+let tentativas=0;
+document.getElementById("f").addEventListener("submit",async e=>{
+  e.preventDefault();
+  const btn=document.getElementById("btn"), erro=document.getElementById("erro"), campo=document.getElementById("senha");
+  btn.disabled=true; btn.textContent="Abrindo…"; erro.textContent="";
+  const lembrar=document.getElementById("lembrar").checked;
+  try{
+    const raw=await derivar(campo.value);
+    await abrir(raw);
+    if(lembrar){ try{localStorage.setItem(KEY,btoa(String.fromCharCode(...raw)))}catch(_){} }
+    raw.fill(0);
+  }catch(_){
+    tentativas++; campo.value="";
+    const espera=Math.min(2**tentativas,30)*1000;
+    erro.textContent="Senha errada.";
+    setTimeout(()=>{btn.disabled=false;btn.textContent="Entrar";campo.focus()},espera);
+  }
+});
+})();
+</script>
+</body>
+</html>
